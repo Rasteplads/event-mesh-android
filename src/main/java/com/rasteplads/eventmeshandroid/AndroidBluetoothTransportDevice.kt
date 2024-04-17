@@ -27,16 +27,8 @@ class AndroidBluetoothTransportDevice(
         get() = TODO("Not yet implemented")
 
     val permissionGrantedResultChannel = Channel<String>()
-
-    private suspend fun waitForPermissionGranted(vararg permissions: String){
-        Log.d(TAG, "Waiting for permissions.")
-        repeat(permissions.size){
-            val permission = permissionGrantedResultChannel.receive()
-            Log.w(TAG, "Permission: $permission received")
-            if (permission !in permissions)
-                Log.wtf(TAG, "Permission: $permission was granted but was never asked for.")
-        }
-    }
+    private lateinit var advertiseCallback: AdvertiseCallbackImpl
+    private lateinit var scanCallback: ScanCallbackImpl
 
     override fun beginTransmitting(message: ByteArray) {
         val requiredPermissions = arrayOf(
@@ -59,27 +51,19 @@ class AndroidBluetoothTransportDevice(
             Log.d(TAG, "Permissions needed to begins sending!")
             ActivityCompat.requestPermissions(activity, resultList.toTypedArray(), 2)
             runBlocking {
-                waitForPermissionGranted(*resultList.toTypedArray())
+                waitForPermissionGranted(permissionGrantedResultChannel, *resultList.toTypedArray())
             }
         }
         Log.d(TAG, "Sending Message: ${message.decodeToString()}")
 
-
         // Create a packet of size 31, with the first two bytes being FF:FF
-        val zeroArray = ByteArray(29) { 0 }
-        val packet = (ByteArray(2) {0xFF.toByte()} + message).copyInto(zeroArray)
-        val wrapper = ByteBuffer.wrap(packet)
-
-        //Create a UUID from the first 16 bytes.
-        val leastSig = wrapper.getLong()
-        val mostSig = wrapper.getLong()
-
-        val uuid = UUID(mostSig, leastSig)
-        val rest = packet.sliceArray(wrapper.position()..<packet.size)
+        val packet = createPacket(message)
+        val uuid = packet.first
+        val rest = packet.second
         Log.d(TAG, "Attempting to send ${16 + rest.size} bytes")
 
         Log.w(TAG, "Advertising: $uuid")
-
+        advertiseCallback = AdvertiseCallbackImpl()
         bluetoothAdapter.bluetoothLeAdvertiser?.startAdvertising(
             AdvertiseSettings.Builder()
                 .setConnectable(false)
@@ -90,10 +74,10 @@ class AndroidBluetoothTransportDevice(
                 .build(),
 
             AdvertiseData.Builder().build(),
-            AdvertiseCallbackImpl()
+            advertiseCallback
         )
     }
-    private lateinit var scanCallback: ScanCallbackImpl
+
     override fun beginReceiving(callback: suspend (ByteArray) -> Unit) {
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
@@ -116,7 +100,7 @@ class AndroidBluetoothTransportDevice(
             Log.d(TAG, "Permissions needed to begins receiving!")
             ActivityCompat.requestPermissions(activity, resultList.toTypedArray(), 2)
             runBlocking {
-                waitForPermissionGranted(*resultList.toTypedArray())
+                waitForPermissionGranted(permissionGrantedResultChannel, *resultList.toTypedArray())
             }
             Log.w(TAG, "All permissions were granted.")
         }
@@ -153,18 +137,44 @@ class AndroidBluetoothTransportDevice(
         val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN)
         val resultList = mutableListOf<String>()
 
-        for (permission in requiredPermissions){
+        for (permission in requiredPermissions) {
             if (ActivityCompat.checkSelfPermission(
                     activity,
                     permission
                 ) != PackageManager.PERMISSION_GRANTED
-            ){
+            ) {
                 Log.w(TAG, "Permission $permission not granted.")
                 resultList.add(permission)
             }
         }
-
         bluetoothAdapter.bluetoothLeScanner.stopScan(scanCallback)
         Log.d(TAG, "Stopped receiving packets.")
     }
+}
+
+
+suspend fun waitForPermissionGranted(permissionGrantedResultChannel: Channel<String>,
+                                             vararg permissions: String){
+    Log.d(TAG, "Waiting for permissions.")
+    repeat(permissions.size){
+        val permission = permissionGrantedResultChannel.receive()
+        Log.w(TAG, "Permission: $permission received")
+        if (permission !in permissions)
+            Log.wtf(TAG, "Permission: $permission was granted but was never asked for.")
+    }
+}
+
+fun createPacket(message: ByteArray): Pair<UUID, ByteArray> {
+    // Create a packet of size 29, with the first two bytes being FF:FF
+    val zeroArray = ByteArray(29) { 0 }
+    val packet = (ByteArray(2) {0xFF.toByte()} + message).copyInto(zeroArray)
+    val wrapper = ByteBuffer.wrap(packet)
+
+    //Create a UUID from the first 16 bytes.
+    val leastSig = wrapper.getLong()
+    val mostSig = wrapper.getLong()
+    return Pair(
+        UUID(mostSig, leastSig),
+        packet.sliceArray(wrapper.position()..<packet.size)
+    )
 }
