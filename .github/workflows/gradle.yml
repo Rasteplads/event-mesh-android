@@ -55,5 +55,5 @@ jobs:
             #- name: Build with Gradle
             #  run: echo 'no' | ./gradlew build --scan
       - name: Build with Gradle
-        run: echo 'no' | gradle build --scan
+        run: echo 'no' | gradle build
 
