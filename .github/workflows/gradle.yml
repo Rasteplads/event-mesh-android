@@ -29,12 +29,12 @@ jobs:
         with:
           distribution: "temurin"
           java-version: 19
-            #- name: Grant execute permission for gradlew
-            #  run: chmod +x gradlew
-            #- name: Check formatting
-            #  run: ./gradlew spotlessCheck
-      - name: Exec
-        run: gradle spotlessCheck
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Check formatting
+        run: ./gradlew spotlessCheck
+      #- name: Exec
+      #  run: gradle spotlessCheck
 
   build:
     strategy:
@@ -50,10 +50,10 @@ jobs:
         with:
           distribution: "temurin"
           java-version: 19
-            #- name: Grant execute permission for gradlew
-            #  run: chmod +x gradlew
-            #- name: Build with Gradle
-            #  run: echo 'no' | ./gradlew build --scan
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
       - name: Build with Gradle
-        run: echo 'no' | gradle build
+        run: echo 'no' | ./gradlew build --scan
+      #- name: Build with Gradle
+      #  run: echo 'no' | gradle build
 
