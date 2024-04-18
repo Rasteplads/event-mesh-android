@@ -1,18 +1,21 @@
 plugins {
-    id("com.android.library")
-    id("org.jetbrains.kotlin.android")
+    id("com.android.library") apply false
+    id("org.jetbrains.kotlin.android") apply false
     id("com.diffplug.spotless") version "6.19.0"
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+        jcenter()
+        google()
+    }
 }
 
 android {
     namespace = "com.rasteplads.eventmeshandroid"
     compileSdk = 34
     
-    buildscript {
-        repositories {
-            mavenCentral()
-        }
-    }
 
     defaultConfig {
         minSdk = 31
