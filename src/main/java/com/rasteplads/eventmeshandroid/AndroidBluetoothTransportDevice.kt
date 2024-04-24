@@ -20,15 +20,27 @@ import java.util.UUID
 
 const val TAG = "EventMesh"
 
-class AndroidBluetoothTransportDevice(
-    private val context: Context,
-    private val bluetoothAdapter: BluetoothAdapter
-): TransportDevice {
+class AndroidBluetoothTransportDevice(): TransportDevice {
     override val transmissionInterval: Long
         get() = TODO("Not yet implemented")
 
     private lateinit var advertiseCallback: AdvertiseCallbackImpl
     private lateinit var scanCallback: ScanCallbackImpl
+    private lateinit var _contextProvider: () -> Context
+    private lateinit var _bluetoothProvider: () -> BluetoothAdapter
+
+    public var contextProvider: () -> Context
+        get() = _contextProvider
+        set(value) {
+            _contextProvider = value
+        }
+
+    public var bluetoothProvider: () -> BluetoothAdapter
+        get() = _bluetoothProvider
+        set(value) {
+            _bluetoothProvider = value
+        }
+
 
     override fun beginTransmitting(message: ByteArray) {
         val requiredPermissions = arrayOf(
@@ -37,7 +49,7 @@ class AndroidBluetoothTransportDevice(
         )
         val neededPermissions = requiredPermissions.takeWhile {
             permission -> (
-                ActivityCompat.checkSelfPermission(context, permission)
+                ActivityCompat.checkSelfPermission(contextProvider(), permission)
                         != PackageManager.PERMISSION_GRANTED
             )
         }
@@ -55,7 +67,7 @@ class AndroidBluetoothTransportDevice(
 
         Log.w(TAG, "Advertising: $uuid")
         advertiseCallback = AdvertiseCallbackImpl()
-        bluetoothAdapter.bluetoothLeAdvertiser?.startAdvertising(
+        bluetoothProvider().bluetoothLeAdvertiser?.startAdvertising(
             AdvertiseSettings.Builder()
                 .setConnectable(false)
                 .setAdvertiseMode(2)
@@ -76,7 +88,7 @@ class AndroidBluetoothTransportDevice(
         )
         val neededPermissions = requiredPermissions.takeWhile {
                 permission -> (
-                ActivityCompat.checkSelfPermission(context, permission)
+                ActivityCompat.checkSelfPermission(contextProvider(), permission)
                         != PackageManager.PERMISSION_GRANTED
                 )
         }
@@ -88,7 +100,7 @@ class AndroidBluetoothTransportDevice(
         val scanFilters = listOf(ScanFilter.Builder()
             .build())
         scanCallback = ScanCallbackImpl(callback)
-        bluetoothAdapter.bluetoothLeScanner.startScan(
+        bluetoothProvider().bluetoothLeScanner.startScan(
             scanFilters,
             ScanSettings.Builder().setLegacy(false).setScanMode(SCAN_MODE_LOW_LATENCY).build(),
             scanCallback
@@ -99,7 +111,7 @@ class AndroidBluetoothTransportDevice(
         val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE)
         val neededPermissions = requiredPermissions.takeWhile {
                 permission -> (
-                ActivityCompat.checkSelfPermission(context, permission)
+                ActivityCompat.checkSelfPermission(contextProvider(), permission)
                         != PackageManager.PERMISSION_GRANTED
                 )
         }
@@ -107,7 +119,7 @@ class AndroidBluetoothTransportDevice(
             throw PermissionsDenied(neededPermissions.toTypedArray())
         }
         val callback = AdvertiseCallbackImpl()
-        bluetoothAdapter.bluetoothLeAdvertiser?.stopAdvertising(callback)
+        bluetoothProvider().bluetoothLeAdvertiser?.stopAdvertising(callback)
         Log.d(TAG, "Stopped sending message.")
     }
 
@@ -115,14 +127,14 @@ class AndroidBluetoothTransportDevice(
         val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN)
         val neededPermissions = requiredPermissions.takeWhile {
                 permission -> (
-                ActivityCompat.checkSelfPermission(context, permission)
+                ActivityCompat.checkSelfPermission(contextProvider(), permission)
                         != PackageManager.PERMISSION_GRANTED
                 )
         }
         if (neededPermissions.isNotEmpty()){
             throw PermissionsDenied(neededPermissions.toTypedArray())
         }
-        bluetoothAdapter.bluetoothLeScanner.stopScan(scanCallback)
+        bluetoothProvider().bluetoothLeScanner.stopScan(scanCallback)
         Log.d(TAG, "Stopped receiving packets.")
     }
 }
