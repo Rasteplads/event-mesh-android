@@ -118,8 +118,8 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         if (neededPermissions.isNotEmpty()){
             throw PermissionsDenied(neededPermissions.toTypedArray())
         }
-        val callback = AdvertiseCallbackImpl()
-        bluetoothProvider().bluetoothLeAdvertiser?.stopAdvertising(callback)
+
+        bluetoothProvider().bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
         Log.d(TAG, "Stopped sending message.")
     }
 
