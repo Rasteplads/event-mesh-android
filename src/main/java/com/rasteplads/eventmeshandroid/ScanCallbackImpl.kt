@@ -3,6 +3,8 @@ package com.rasteplads.eventmeshandroid
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.util.Log
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.nio.ByteBuffer
 
@@ -32,7 +34,7 @@ class ScanCallbackImpl(
         val out = bytes.joinToString(":") { byte -> byte.toHexString() }
         Log.d(TAG, "Parsed packet:\n" + Charsets.UTF_8.decode(buffer).toString() + "\n" + out)
 
-        runBlocking {
+        GlobalScope.launch {
             onDecodeSuccess(content)
         }
     }

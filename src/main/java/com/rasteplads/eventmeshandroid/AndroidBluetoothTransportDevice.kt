@@ -1,18 +1,19 @@
 package com.rasteplads.eventmeshandroid
 
 import android.Manifest
-import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
+import android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.ParcelUuid
 import android.util.Log
+import androidx.activity.result.ActivityResultLauncher
 import androidx.core.app.ActivityCompat
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.runBlocking
+import androidx.core.content.ContextCompat
 import rasteplads.api.TransportDevice
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -20,13 +21,12 @@ import java.util.UUID
 const val TAG = "EventMesh"
 
 class AndroidBluetoothTransportDevice(
-    private val activity: Activity,
+    private val context: Context,
     private val bluetoothAdapter: BluetoothAdapter
 ): TransportDevice {
     override val transmissionInterval: Long
         get() = TODO("Not yet implemented")
 
-    val permissionGrantedResultChannel = Channel<String>()
     private lateinit var advertiseCallback: AdvertiseCallbackImpl
     private lateinit var scanCallback: ScanCallbackImpl
 
@@ -35,25 +35,16 @@ class AndroidBluetoothTransportDevice(
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
         )
-        val resultList = mutableListOf<String>()
+        val neededPermissions = requiredPermissions.takeWhile {
+            permission -> (
+                ActivityCompat.checkSelfPermission(context, permission)
+                        != PackageManager.PERMISSION_GRANTED
+            )
+        }
+        if (neededPermissions.isNotEmpty()){
+            throw PermissionsDenied(neededPermissions.toTypedArray())
+        }
 
-        for (permission in requiredPermissions){
-            if (ActivityCompat.checkSelfPermission(
-                    activity,
-                    permission
-                ) != PackageManager.PERMISSION_GRANTED
-            ){
-                Log.w(TAG, "Permission $permission not granted.")
-                resultList.add(permission)
-            }
-        }
-        if (resultList.isNotEmpty()){
-            Log.d(TAG, "Permissions needed to begins sending!")
-            ActivityCompat.requestPermissions(activity, resultList.toTypedArray(), 2)
-            runBlocking {
-                waitForPermissionGranted(permissionGrantedResultChannel, *resultList.toTypedArray())
-            }
-        }
         Log.d(TAG, "Sending Message: ${message.decodeToString()}")
 
         // Create a packet of size 31, with the first two bytes being FF:FF
@@ -81,52 +72,39 @@ class AndroidBluetoothTransportDevice(
     override fun beginReceiving(callback: suspend (ByteArray) -> Unit) {
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
-        val resultList = mutableListOf<String>()
+        val neededPermissions = requiredPermissions.takeWhile {
+                permission -> (
+                ActivityCompat.checkSelfPermission(context, permission)
+                        != PackageManager.PERMISSION_GRANTED
+                )
+        }
+        if (neededPermissions.isNotEmpty()){
+            throw PermissionsDenied(neededPermissions.toTypedArray())
+        }
 
-        for (permission in requiredPermissions){
-            if (ActivityCompat.checkSelfPermission(
-                    activity,
-                    permission
-                ) != PackageManager.PERMISSION_GRANTED
-            ){
-                Log.w(TAG, "Permission $permission not granted.")
-                resultList.add(permission)
-            }
-        }
-        if (resultList.isNotEmpty()){
-            Log.d(TAG, "Permissions needed to begins receiving!")
-            ActivityCompat.requestPermissions(activity, resultList.toTypedArray(), 2)
-            runBlocking {
-                waitForPermissionGranted(permissionGrantedResultChannel, *resultList.toTypedArray())
-            }
-            Log.w(TAG, "All permissions were granted.")
-        }
         Log.d(TAG, "Receiving packets.")
         val scanFilters = listOf(ScanFilter.Builder()
             .build())
         scanCallback = ScanCallbackImpl(callback)
         bluetoothAdapter.bluetoothLeScanner.startScan(
             scanFilters,
-            ScanSettings.Builder().setLegacy(false).build(),
+            ScanSettings.Builder().setLegacy(false).setScanMode(SCAN_MODE_LOW_LATENCY).build(),
             scanCallback
         )
     }
 
     override fun stopTransmitting() {
-        if (ActivityCompat.checkSelfPermission(
-                activity,
-                Manifest.permission.BLUETOOTH_ADVERTISE
-            ) != PackageManager.PERMISSION_GRANTED
-            || ActivityCompat.checkSelfPermission(activity,
-                Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            Log.w(TAG, "Permission Denied, requesting access.")
-            val permissions = arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE)
-            ActivityCompat.requestPermissions(activity, permissions, 1)
+        val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE)
+        val neededPermissions = requiredPermissions.takeWhile {
+                permission -> (
+                ActivityCompat.checkSelfPermission(context, permission)
+                        != PackageManager.PERMISSION_GRANTED
+                )
+        }
+        if (neededPermissions.isNotEmpty()){
+            throw PermissionsDenied(neededPermissions.toTypedArray())
         }
         val callback = AdvertiseCallbackImpl()
         bluetoothAdapter.bluetoothLeAdvertiser?.stopAdvertising(callback)
@@ -135,34 +113,59 @@ class AndroidBluetoothTransportDevice(
 
     override fun stopReceiving() {
         val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN)
-        val resultList = mutableListOf<String>()
-
-        for (permission in requiredPermissions) {
-            if (ActivityCompat.checkSelfPermission(
-                    activity,
-                    permission
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.w(TAG, "Permission $permission not granted.")
-                resultList.add(permission)
-            }
+        val neededPermissions = requiredPermissions.takeWhile {
+                permission -> (
+                ActivityCompat.checkSelfPermission(context, permission)
+                        != PackageManager.PERMISSION_GRANTED
+                )
+        }
+        if (neededPermissions.isNotEmpty()){
+            throw PermissionsDenied(neededPermissions.toTypedArray())
         }
         bluetoothAdapter.bluetoothLeScanner.stopScan(scanCallback)
         Log.d(TAG, "Stopped receiving packets.")
     }
 }
 
+fun permissionActivityResultHandler(permissions: Map<String, Boolean>, permissionsGrantedCallback: () -> Unit){
+        // TODO: Currently ignores permission status: Assumes permission granted.
+        Log.d(TAG, "Got permissions")
+        permissionsGrantedCallback()
+}
 
-suspend fun waitForPermissionGranted(permissionGrantedResultChannel: Channel<String>,
-                                             vararg permissions: String){
-    Log.d(TAG, "Waiting for permissions.")
-    repeat(permissions.size){
-        val permission = permissionGrantedResultChannel.receive()
-        Log.w(TAG, "Permission: $permission received")
-        if (permission !in permissions)
-            Log.wtf(TAG, "Permission: $permission was granted but was never asked for.")
+val REQUIRED_PERMISSIONS = arrayOf(
+    Manifest.permission.BLUETOOTH_SCAN,
+    Manifest.permission.ACCESS_FINE_LOCATION,
+    Manifest.permission.BLUETOOTH_ADVERTISE,
+    Manifest.permission.BLUETOOTH_CONNECT
+)
+
+fun permissionsGranted(context: Context): Boolean {
+    if (REQUIRED_PERMISSIONS.any { permission ->
+            (ContextCompat.checkSelfPermission(context, permission)
+                    != PackageManager.PERMISSION_GRANTED)
+        }) {
+        Log.d(TAG, "Permissions needed.")
+        return false
+    }
+    return true
+}
+
+fun requestPermissions(context: Context, requestPermissionsLauncher: ActivityResultLauncher<Array<String>>){
+    if (REQUIRED_PERMISSIONS.any {
+                permission -> (ContextCompat.checkSelfPermission(context, permission)
+                != PackageManager.PERMISSION_GRANTED)
+        }){
+        Log.d(TAG, "Permissions needed. Requesting them now.")
+
+        requestPermissionsLauncher.launch(REQUIRED_PERMISSIONS)
     }
 }
+
+class PermissionDenied(private val permission: String) :
+    Exception("Permission denied: $permission") {}
+class PermissionsDenied(private val permissions: Array<String>) :
+    Exception("Permissions denied: ${permissions.toList()}") {}
 
 fun createPacket(message: ByteArray): Pair<UUID, ByteArray> {
     // Create a packet of size 29, with the first two bytes being FF:FF
