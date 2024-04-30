@@ -25,7 +25,7 @@ class ScanCallbackImpl(
         val type = buffer.get()
 
         repeat(2){
-            if(buffer.get() != 0x88.toByte())
+            if(buffer.get() != 0xFF.toByte())
                 return
         }
 
