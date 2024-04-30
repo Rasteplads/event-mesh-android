@@ -15,6 +15,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import rasteplads.api.TransportDevice
+import rasteplads.util.toByteArray
 import java.nio.ByteBuffer
 import java.util.UUID
 
@@ -118,7 +119,8 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         if (neededPermissions.isNotEmpty()){
             throw PermissionsDenied(neededPermissions.toTypedArray())
         }
-
+        if (!::advertiseCallback.isInitialized)
+            return
         bluetoothProvider().bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
         Log.d(TAG, "Stopped sending message.")
     }
@@ -179,17 +181,24 @@ class PermissionDenied(private val permission: String) :
 class PermissionsDenied(private val permissions: Array<String>) :
     Exception("Permissions denied: ${permissions.toList()}") {}
 
+@OptIn(ExperimentalStdlibApi::class)
 fun createPacket(message: ByteArray): Pair<UUID, ByteArray> {
     // Create a packet of size 29, with the first two bytes being FF:FF
-    val zeroArray = ByteArray(29) { 0 }
-    val packet = (ByteArray(2) {0xFF.toByte()} + message).copyInto(zeroArray)
+    val zeroArray = ByteArray(27) { 0 }
+    val packet = (message).copyInto(zeroArray)
+    Log.d(TAG, "Packet: ${message.toHexString()}")
     val wrapper = ByteBuffer.wrap(packet)
+    val uuidString = "%S%S%S%S-%S%S-%S%S-%S%S-%S%S%S%Sffff".format(*(Array(14) { _ ->
+        wrapper.get().toHexString()
+    }).reversed().toTypedArray())
 
-    //Create a UUID from the first 16 bytes.
-    val leastSig = wrapper.getLong()
-    val mostSig = wrapper.getLong()
     return Pair(
-        UUID(mostSig, leastSig),
+        UUID.fromString(uuidString),
         packet.sliceArray(wrapper.position()..<packet.size)
     )
 }
+/*
+ ___ Least Significant ___ ___ Most Significant ____
+| FF FF XX XX XX XX XX XX | XX XX XX XX XX XX XX XX |
+|_________________________|_________________________|
+ */

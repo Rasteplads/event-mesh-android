@@ -23,8 +23,9 @@ class ScanCallbackImpl(
             return
         // TODO: Check that the type is correct.
         val type = buffer.get()
+
         repeat(2){
-            if(buffer.get() != 0xFF.toByte())
+            if(buffer.get() != 0x88.toByte())
                 return
         }
 
@@ -32,7 +33,7 @@ class ScanCallbackImpl(
         buffer.get(content,0, length - 3)
 
         val out = bytes.joinToString(":") { byte -> byte.toHexString() }
-        Log.d(TAG, "Parsed packet:\n" + Charsets.UTF_8.decode(buffer).toString() + "\n" + out)
+        Log.d(TAG, "Parsed packet:\n$out")
 
         GlobalScope.launch {
             onDecodeSuccess(content)
