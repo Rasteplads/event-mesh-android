@@ -2,8 +2,10 @@ package com.rasteplads.eventmeshandroid
 
 import android.Manifest
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
 import android.bluetooth.le.ScanSettings.SCAN_MODE_LOW_LATENCY
@@ -15,18 +17,15 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import rasteplads.api.TransportDevice
-import rasteplads.util.toByteArray
 import java.nio.ByteBuffer
 import java.util.UUID
 
 const val TAG = "EventMesh"
 
-class AndroidBluetoothTransportDevice(): TransportDevice {
+class AndroidBluetoothTransportDevice: TransportDevice<ScanCallback, AdvertiseCallback> {
     override val transmissionInterval: Long
         get() = TODO("Not yet implemented")
 
-    private lateinit var advertiseCallback: AdvertiseCallbackImpl
-    private lateinit var scanCallback: ScanCallbackImpl
     private lateinit var _contextProvider: () -> Context
     private lateinit var _bluetoothProvider: () -> BluetoothAdapter
 
@@ -43,7 +42,7 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         }
 
 
-    override fun beginTransmitting(message: ByteArray) {
+    override fun beginTransmitting(message: ByteArray): AdvertiseCallback {
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_ADVERTISE,
             Manifest.permission.BLUETOOTH_CONNECT,
@@ -67,7 +66,8 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         Log.d(TAG, "Attempting to send ${16 + rest.size} bytes")
 
         Log.w(TAG, "Advertising: $uuid")
-        advertiseCallback = AdvertiseCallbackImpl()
+        val advertiseCallback = AdvertiseCallbackImpl()
+
         bluetoothProvider().bluetoothLeAdvertiser?.startAdvertising(
             AdvertiseSettings.Builder()
                 .setConnectable(false)
@@ -80,9 +80,10 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
             AdvertiseData.Builder().build(),
             advertiseCallback
         )
+        return advertiseCallback
     }
 
-    override fun beginReceiving(callback: suspend (ByteArray) -> Unit) {
+    override fun beginReceiving(callback: suspend (ByteArray) -> Unit): ScanCallback {
         val requiredPermissions = arrayOf(
             Manifest.permission.BLUETOOTH_SCAN,
             Manifest.permission.ACCESS_FINE_LOCATION
@@ -100,15 +101,17 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         Log.d(TAG, "Receiving packets.")
         val scanFilters = listOf(ScanFilter.Builder()
             .build())
-        scanCallback = ScanCallbackImpl(callback)
+        val scanCallback = ScanCallbackImpl(callback)
+
         bluetoothProvider().bluetoothLeScanner.startScan(
             scanFilters,
             ScanSettings.Builder().setLegacy(false).setScanMode(SCAN_MODE_LOW_LATENCY).build(),
             scanCallback
         )
+        return scanCallback
     }
 
-    override fun stopTransmitting() {
+    override fun stopTransmitting(callback: AdvertiseCallback) {
         val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_ADVERTISE)
         val neededPermissions = requiredPermissions.takeWhile {
                 permission -> (
@@ -119,13 +122,12 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         if (neededPermissions.isNotEmpty()){
             throw PermissionsDenied(neededPermissions.toTypedArray())
         }
-        if (!::advertiseCallback.isInitialized)
-            return
-        bluetoothProvider().bluetoothLeAdvertiser?.stopAdvertising(advertiseCallback)
+
+        bluetoothProvider().bluetoothLeAdvertiser?.stopAdvertising(callback)
         Log.d(TAG, "Stopped sending message.")
     }
 
-    override fun stopReceiving() {
+    override fun stopReceiving(callback: ScanCallback) {
         val requiredPermissions = arrayOf(Manifest.permission.BLUETOOTH_SCAN)
         val neededPermissions = requiredPermissions.takeWhile {
                 permission -> (
@@ -136,7 +138,8 @@ class AndroidBluetoothTransportDevice(): TransportDevice {
         if (neededPermissions.isNotEmpty()){
             throw PermissionsDenied(neededPermissions.toTypedArray())
         }
-        bluetoothProvider().bluetoothLeScanner.stopScan(scanCallback)
+
+        bluetoothProvider().bluetoothLeScanner.stopScan(callback)
         Log.d(TAG, "Stopped receiving packets.")
     }
 }
@@ -196,8 +199,11 @@ fun createPacket(message: ByteArray): Pair<UUID, ByteArray> {
         packet.sliceArray(wrapper.position()..<packet.size)
     )
 }
+
 /*
+
  ___ Least Significant ___ ___ Most Significant ____
 | FF FF XX XX XX XX XX XX | XX XX XX XX XX XX XX XX |
 |_________________________|_________________________|
+
  */
