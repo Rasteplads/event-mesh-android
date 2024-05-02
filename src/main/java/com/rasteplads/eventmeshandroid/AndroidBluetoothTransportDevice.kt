@@ -186,7 +186,6 @@ fun createPacket(message: ByteArray): Pair<UUID, ByteArray> {
     // Create a packet of size 29, with the first two bytes being FF:FF
     val zeroArray = ByteArray(27) { 0 }
     val packet = (message).copyInto(zeroArray)
-    Log.d(TAG, "Packet: ${message.toHexString()}")
     val wrapper = ByteBuffer.wrap(packet)
     val uuidString = "%S%S%S%S-%S%S-%S%S-%S%S-%S%S%S%Sffff".format(*(Array(14) { _ ->
         wrapper.get().toHexString()

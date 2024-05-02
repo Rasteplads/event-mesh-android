@@ -20,7 +20,9 @@ class AndroidBluetoothTransportDeviceUnitTest {
     fun createPacket_packet_begins_with_PACKET_START(){
         val firstTwo = packet.first.leastSignificantBits
             .toByteArray()
-            .sliceArray(0..1)
+            .reversed()
+            .slice(0..1)
+            .toByteArray()
 
         assertTrue(firstTwo.contentEquals(PACKET_START))
     }
