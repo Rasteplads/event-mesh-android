@@ -187,6 +187,7 @@ class PermissionsDenied(private val permissions: Array<String>) :
 @OptIn(ExperimentalStdlibApi::class)
 fun createPacket(message: ByteArray): Pair<UUID, ByteArray> {
     // Create a packet of size 29, with the first two bytes being FF:FF
+    //Log.d(TAG, "Sending message: ${message.toEventMeshDebugString()}")
     val zeroArray = ByteArray(27) { 0 }
     val packet = (message).copyInto(zeroArray)
     val wrapper = ByteBuffer.wrap(packet)
