@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.le.AdvertiseCallback
 import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
+import android.bluetooth.le.AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanSettings
@@ -71,7 +72,7 @@ class AndroidBluetoothTransportDevice: TransportDevice<ScanCallback, AdvertiseCa
         bluetoothProvider().bluetoothLeAdvertiser?.startAdvertising(
             AdvertiseSettings.Builder()
                 .setConnectable(false)
-                .setAdvertiseMode(2)
+                .setAdvertiseMode(ADVERTISE_MODE_LOW_LATENCY)
                 .build(),
             AdvertiseData.Builder()
                 .addServiceData(ParcelUuid(uuid), rest)
