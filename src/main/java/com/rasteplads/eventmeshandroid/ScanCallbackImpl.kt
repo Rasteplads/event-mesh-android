@@ -5,25 +5,22 @@ import android.bluetooth.le.ScanResult
 import android.util.Log
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.nio.ByteBuffer
 
 class ScanCallbackImpl(
     private val onDecodeSuccess: suspend (ByteArray) -> Unit
 ): ScanCallback() {
-    @OptIn(ExperimentalStdlibApi::class)
+
     override fun onScanResult(callbackType: Int, result: ScanResult?) {
         super.onScanResult(callbackType, result)
-        val bytes = result?.scanRecord?.bytes ?: return
+        val bytes = result?.scanRecord?.getManufacturerSpecificData(0xF1A9) ?: return
+        val packet = bytes.toEventMeshDebugString()
+        Log.d(TAG, "Parsed packet:\n$packet")
         try {
-            //Log.d(TAG, "Received bytes")
-            val frame = bytes.toEventMeshFrame()
-            val packet = frame.payload.toEventMeshDebugString()
-            Log.d(TAG, "Parsed packet:\n$packet")
             GlobalScope.launch {
-                onDecodeSuccess(frame.payload)
+                onDecodeSuccess(bytes)
             }
-        } catch (e: IllegalStateException){
+        } catch (e: Exception){
             // Ignore packets that cannot be parsed.
             return
         }
@@ -42,35 +39,6 @@ class ScanCallbackImpl(
         }
         Log.w(TAG, "Failed to scan for advertisements: $reason")
     }
-}
-
-class EventMeshFrame(private var bytes: ByteArray) {
-
-    var length: Int
-        get() = bytes[0].toInt()
-        set(value) { bytes[0] = value.toByte() }
-
-    var type: Byte
-        get() = bytes[1]
-        set(value) { bytes[1] = value }
-
-    val eventMeshCode: ByteArray
-        get() = bytes.sliceArray(2..3)
-
-    var payload: ByteArray
-        get() = bytes.drop(4).toByteArray()
-        set(value) { value.copyInto(bytes, 4) }
-
-    init {
-        check(bytes.size == 31) { "The size of an EventMesh frame is 31 bytes." }
-        check(length == 30) { "The length of the message should be 29 bytes, was $length" }
-        check(eventMeshCode.contentEquals(ByteArray(2) {0xFF.toByte()})) { "The message must start with the magic string FF:FF" }
-    }
-
-}
-
-fun ByteArray.toEventMeshFrame(): EventMeshFrame {
-    return EventMeshFrame(this)
 }
 
 fun ByteArray.toEventMeshDebugString(): String {
